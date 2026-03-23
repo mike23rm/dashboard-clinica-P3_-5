@@ -1,1 +1,150 @@
-import pandas as pd import plotly.express as px from dash import Dash, html, dcc, Input, Output import dash_bootstrap_components as dbc import os # ================================ # 📥 DATA # ================================ BASE_DIR = os.path.dirname(os.path.abspath(__file__)) file_path = os.path.join(BASE_DIR, "clinical_analytics.csv") df = pd.read_csv(file_path) # Limpiar columnas df.columns = df.columns.str.strip() # Convertir fecha df['Appt Start Time'] = pd.to_datetime(df['Appt Start Time'], errors='coerce') # ================================ # 🚀 APP # ================================ app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP]) server = app.server # 🔥 IMPORTANTE para Render # ================================ # 🎨 LAYOUT # ================================ app.layout = dbc.Container([ dbc.Row([ dbc.Col(html.H2("🏥 Dashboard Clínica", className="text-center")) ]), dbc.Row([ dbc.Col([ dcc.DatePickerRange( id='date_range', start_date=df['Appt Start Time'].min(), end_date=df['Appt Start Time'].max() ) ], width=4), dbc.Col([ dcc.Dropdown( id='clinic_filter', options=[{'label': c, 'value': c} for c in df['Clinic Name'].dropna().unique()], multi=True, placeholder="Selecciona clínicas" ) ], width=4), dbc.Col([ dcc.Dropdown( id='source_filter', options=[{'label': s, 'value': s} for s in df['Admit Source'].dropna().unique()], multi=True, placeholder="Fuente de admisión" ) ], width=4), ]), html.Br(), dbc.Row([ dbc.Col(html.Div(id="kpi_total"), width=4), dbc.Col(html.Div(id="kpi_wait"), width=4), dbc.Col(html.Div(id="kpi_rating"), width=4), ]), html.Br(), dbc.Row([ dbc.Col(dcc.Graph(id="volume_chart"), width=4), dbc.Col(dcc.Graph(id="wait_chart"), width=4), dbc.Col(dcc.Graph(id="rating_chart"), width=4), ]) ], fluid=True) # ================================ # 🔄 CALLBACK # ================================ @app.callback( [ Output("volume_chart", "figure"), Output("wait_chart", "figure"), Output("rating_chart", "figure"), Output("kpi_total", "children"), Output("kpi_wait", "children"), Output("kpi_rating", "children"), ], [ Input("date_range", "start_date"), Input("date_range", "end_date"), Input("clinic_filter", "value"), Input("source_filter", "value"), ] ) def update_dashboard(start, end, clinics, sources): dff = df.copy() dff = dff.dropna(subset=['Appt Start Time']) if start and end: dff = dff[ (dff['Appt Start Time'] >= start) & (dff['Appt Start Time'] <= end) ] if clinics: dff = dff[dff['Clinic Name'].isin(clinics)] if sources: dff = dff[dff['Admit Source'].isin(sources)] # 📊 Gráficos fig_volume = px.bar(dff, x="Clinic Name", title="Volumen de Pacientes") fig_wait = px.box( dff, x="Department", y="Wait Time Min", title="Tiempo de Espera" ) fig_rating = px.histogram( dff, x="Care Score", color="Department", title="Satisfacción" ) # 📌 KPIs total = len(dff) avg_wait = round(dff['Wait Time Min'].mean(), 2) avg_rating = round(dff['Care Score'].mean(), 2) kpi_total = dbc.Card(dbc.CardBody([html.H5("Pacientes"), html.H3(total)])) kpi_wait = dbc.Card(dbc.CardBody([html.H5("Tiempo Promedio"), html.H3(avg_wait)])) kpi_rating = dbc.Card(dbc.CardBody([html.H5("Satisfacción"), html.H3(avg_rating)])) return fig_volume, fig_wait, fig_rating, kpi_total, kpi_wait, kpi_rating # ================================ # ▶️ RUN LOCAL # ================================ if __name__ == "__main__": app.run()
+import pandas as pd
+import plotly.express as px
+from dash import Dash, html, dcc, Input, Output
+import dash_bootstrap_components as dbc
+import os
+
+# ================================
+# 📥 DATA
+# ================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(BASE_DIR, "clinical_analytics.csv")
+
+df = pd.read_csv(file_path)
+
+# Limpiar columnas
+df.columns = df.columns.str.strip()
+
+# Convertir fecha
+df['Appt Start Time'] = pd.to_datetime(df['Appt Start Time'], errors='coerce')
+
+# ================================
+# 🚀 APP
+# ================================
+app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+server = app.server  # 🔥 IMPORTANTE para Render
+
+# ================================
+# 🎨 LAYOUT
+# ================================
+app.layout = dbc.Container([
+
+    dbc.Row([
+        dbc.Col(html.H2("🏥 Dashboard Clínica", className="text-center"))
+    ]),
+
+    dbc.Row([
+        dbc.Col([
+            dcc.DatePickerRange(
+                id='date_range',
+                start_date=df['Appt Start Time'].min(),
+                end_date=df['Appt Start Time'].max()
+            )
+        ], width=4),
+
+        dbc.Col([
+            dcc.Dropdown(
+                id='clinic_filter',
+                options=[{'label': c, 'value': c} for c in df['Clinic Name'].dropna().unique()],
+                multi=True,
+                placeholder="Selecciona clínicas"
+            )
+        ], width=4),
+
+        dbc.Col([
+            dcc.Dropdown(
+                id='source_filter',
+                options=[{'label': s, 'value': s} for s in df['Admit Source'].dropna().unique()],
+                multi=True,
+                placeholder="Fuente de admisión"
+            )
+        ], width=4),
+    ]),
+
+    html.Br(),
+
+    dbc.Row([
+        dbc.Col(html.Div(id="kpi_total"), width=4),
+        dbc.Col(html.Div(id="kpi_wait"), width=4),
+        dbc.Col(html.Div(id="kpi_rating"), width=4),
+    ]),
+
+    html.Br(),
+
+    dbc.Row([
+        dbc.Col(dcc.Graph(id="volume_chart"), width=4),
+        dbc.Col(dcc.Graph(id="wait_chart"), width=4),
+        dbc.Col(dcc.Graph(id="rating_chart"), width=4),
+    ])
+
+], fluid=True)
+
+# ================================
+# 🔄 CALLBACK
+# ================================
+@app.callback(
+    [
+        Output("volume_chart", "figure"),
+        Output("wait_chart", "figure"),
+        Output("rating_chart", "figure"),
+        Output("kpi_total", "children"),
+        Output("kpi_wait", "children"),
+        Output("kpi_rating", "children"),
+    ],
+    [
+        Input("date_range", "start_date"),
+        Input("date_range", "end_date"),
+        Input("clinic_filter", "value"),
+        Input("source_filter", "value"),
+    ]
+)
+def update_dashboard(start, end, clinics, sources):
+
+    dff = df.copy()
+    dff = dff.dropna(subset=['Appt Start Time'])
+
+    if start and end:
+        dff = dff[
+            (dff['Appt Start Time'] >= start) &
+            (dff['Appt Start Time'] <= end)
+        ]
+
+    if clinics:
+        dff = dff[dff['Clinic Name'].isin(clinics)]
+
+    if sources:
+        dff = dff[dff['Admit Source'].isin(sources)]
+
+    # 📊 Gráficos
+    fig_volume = px.bar(dff, x="Clinic Name", title="Volumen de Pacientes")
+
+    fig_wait = px.box(
+        dff,
+        x="Department",
+        y="Wait Time Min",
+        title="Tiempo de Espera"
+    )
+
+    fig_rating = px.histogram(
+        dff,
+        x="Care Score",
+        color="Department",
+        title="Satisfacción"
+    )
+
+    # 📌 KPIs
+    total = len(dff)
+    avg_wait = round(dff['Wait Time Min'].mean(), 2)
+    avg_rating = round(dff['Care Score'].mean(), 2)
+
+    kpi_total = dbc.Card(dbc.CardBody([html.H5("Pacientes"), html.H3(total)]))
+    kpi_wait = dbc.Card(dbc.CardBody([html.H5("Tiempo Promedio"), html.H3(avg_wait)]))
+    kpi_rating = dbc.Card(dbc.CardBody([html.H5("Satisfacción"), html.H3(avg_rating)]))
+
+    return fig_volume, fig_wait, fig_rating, kpi_total, kpi_wait, kpi_rating
+
+# ================================
+# ▶️ RUN LOCAL
+# ================================
+if __name__ == "__main__":
+    app.run()
