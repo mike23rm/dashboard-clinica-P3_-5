@@ -1,80 +1,115 @@
+```python
+# ================================
+# 📦 IMPORTACIONES
+# ================================
 import pandas as pd
 import plotly.express as px
 from dash import Dash, html, dcc, Input, Output
 import dash_bootstrap_components as dbc
 import os
 
+# Tema gráfico
+px.defaults.template = "simple_white"
+
 # ================================
-# 📥 DATA
+# 📥 CARGA DE DATOS
 # ================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 file_path = os.path.join(BASE_DIR, "clinical_analytics.csv")
 
 df = pd.read_csv(file_path)
-
-# Limpiar columnas
 df.columns = df.columns.str.strip()
 
-# Convertir fecha
 df['Appt Start Time'] = pd.to_datetime(df['Appt Start Time'], errors='coerce')
+df = df.dropna(subset=['Appt Start Time'])
 
 # ================================
 # 🚀 APP
 # ================================
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
 server = app.server  # 🔥 IMPORTANTE para Render
+
+# ================================
+# 🎨 ESTILOS
+# ================================
+CARD_STYLE = {
+    "borderRadius": "15px",
+    "boxShadow": "0px 4px 10px rgba(0,0,0,0.4)",
+    "padding": "10px"
+}
 
 # ================================
 # 🎨 LAYOUT
 # ================================
 app.layout = dbc.Container([
 
-    dbc.Row([
-        dbc.Col(html.H2("🏥 Dashboard Clínica", className="text-center"))
-    ]),
+    dbc.Navbar(
+        dbc.Container([
+            dbc.NavbarBrand("🏥 Dashboard Clínico", className="fw-bold fs-4"),
+        ]),
+        color="dark",
+        dark=True,
+        className="mb-4"
+    ),
+
+    dbc.Card([
+        dbc.CardBody([
+            dbc.Row([
+
+                dbc.Col([
+                    html.Label("📅 Rango de fechas"),
+                    dcc.DatePickerRange(
+                        id='filtro_fecha',
+                        start_date=df['Appt Start Time'].min(),
+                        end_date=df['Appt Start Time'].max()
+                    )
+                ], md=4),
+
+                dbc.Col([
+                    html.Label("🏥 Clínica"),
+                    dcc.Dropdown(
+                        id='filtro_clinica',
+                        options=[{'label': c, 'value': c} for c in df['Clinic Name'].dropna().unique()],
+                        multi=True
+                    )
+                ], md=4),
+
+                dbc.Col([
+                    html.Label("🚑 Fuente"),
+                    dcc.Dropdown(
+                        id='filtro_fuente',
+                        options=[{'label': s, 'value': s} for s in df['Admit Source'].dropna().unique()],
+                        multi=True
+                    )
+                ], md=4),
+
+            ])
+        ])
+    ], style=CARD_STYLE, className="mb-4"),
 
     dbc.Row([
-        dbc.Col([
-            dcc.DatePickerRange(
-                id='date_range',
-                start_date=df['Appt Start Time'].min(),
-                end_date=df['Appt Start Time'].max()
-            )
-        ], width=4),
-
-        dbc.Col([
-            dcc.Dropdown(
-                id='clinic_filter',
-                options=[{'label': c, 'value': c} for c in df['Clinic Name'].dropna().unique()],
-                multi=True,
-                placeholder="Selecciona clínicas"
-            )
-        ], width=4),
-
-        dbc.Col([
-            dcc.Dropdown(
-                id='source_filter',
-                options=[{'label': s, 'value': s} for s in df['Admit Source'].dropna().unique()],
-                multi=True,
-                placeholder="Fuente de admisión"
-            )
-        ], width=4),
-    ]),
-
-    html.Br(),
+        dbc.Col(html.Div(id="kpi_pacientes"), md=4),
+        dbc.Col(html.Div(id="kpi_espera"), md=4),
+        dbc.Col(html.Div(id="kpi_satisfaccion"), md=4),
+    ], className="mb-4"),
 
     dbc.Row([
-        dbc.Col(html.Div(id="kpi_total"), width=4),
-        dbc.Col(html.Div(id="kpi_wait"), width=4),
-        dbc.Col(html.Div(id="kpi_rating"), width=4),
-    ]),
 
-    html.Br(),
+        dbc.Col(
+            dbc.Card([dcc.Graph(id="grafico_volumen")], style=CARD_STYLE),
+            md=4
+        ),
 
-    dbc.Row([
-        dbc.Col(dcc.Graph(id="volume_chart"), width=4),
-        dbc.Col(dcc.Graph(id="wait_chart"), width=4),
-        dbc.Col(dcc.Graph(id="rating_chart"), width=4),
+        dbc.Col(
+            dbc.Card([dcc.Graph(id="grafico_espera")], style=CARD_STYLE),
+            md=4
+        ),
+
+        dbc.Col(
+            dbc.Card([dcc.Graph(id="grafico_satisfaccion")], style=CARD_STYLE),
+            md=4
+        ),
+
     ])
 
 ], fluid=True)
@@ -84,67 +119,78 @@ app.layout = dbc.Container([
 # ================================
 @app.callback(
     [
-        Output("volume_chart", "figure"),
-        Output("wait_chart", "figure"),
-        Output("rating_chart", "figure"),
-        Output("kpi_total", "children"),
-        Output("kpi_wait", "children"),
-        Output("kpi_rating", "children"),
+        Output("grafico_volumen", "figure"),
+        Output("grafico_espera", "figure"),
+        Output("grafico_satisfaccion", "figure"),
+        Output("kpi_pacientes", "children"),
+        Output("kpi_espera", "children"),
+        Output("kpi_satisfaccion", "children"),
     ],
     [
-        Input("date_range", "start_date"),
-        Input("date_range", "end_date"),
-        Input("clinic_filter", "value"),
-        Input("source_filter", "value"),
+        Input("filtro_fecha", "start_date"),
+        Input("filtro_fecha", "end_date"),
+        Input("filtro_clinica", "value"),
+        Input("filtro_fuente", "value"),
     ]
 )
-def update_dashboard(start, end, clinics, sources):
+def actualizar_dashboard(fecha_inicio, fecha_fin, clinicas, fuentes):
 
-    dff = df.copy()
-    dff = dff.dropna(subset=['Appt Start Time'])
+    datos = df.copy()
 
-    if start and end:
-        dff = dff[
-            (dff['Appt Start Time'] >= start) &
-            (dff['Appt Start Time'] <= end)
+    if fecha_inicio and fecha_fin:
+        datos = datos[
+            (datos['Appt Start Time'] >= fecha_inicio) &
+            (datos['Appt Start Time'] <= fecha_fin)
         ]
 
-    if clinics:
-        dff = dff[dff['Clinic Name'].isin(clinics)]
+    if clinicas:
+        datos = datos[datos['Clinic Name'].isin(clinicas)]
 
-    if sources:
-        dff = dff[dff['Admit Source'].isin(sources)]
+    if fuentes:
+        datos = datos[datos['Admit Source'].isin(fuentes)]
 
-    # 📊 Gráficos
-    fig_volume = px.bar(dff, x="Clinic Name", title="Volumen de Pacientes")
+    # 📊 VOLUMEN
+    volumen = datos.groupby("Clinic Name").size().reset_index(name="Pacientes")
 
-    fig_wait = px.box(
-        dff,
+    fig_volumen = px.bar(
+        volumen,
+        x="Clinic Name",
+        y="Pacientes",
+        color="Pacientes",
+        title="Volumen de Pacientes"
+    )
+
+    # ⏳ ESPERA
+    fig_espera = px.box(
+        datos,
         x="Department",
         y="Wait Time Min",
         title="Tiempo de Espera"
     )
 
-    fig_rating = px.histogram(
-        dff,
+    # ⭐ SATISFACCIÓN
+    fig_satisfaccion = px.histogram(
+        datos,
         x="Care Score",
         color="Department",
         title="Satisfacción"
     )
 
     # 📌 KPIs
-    total = len(dff)
-    avg_wait = round(dff['Wait Time Min'].mean(), 2)
-    avg_rating = round(dff['Care Score'].mean(), 2)
+    total = len(datos)
+    avg_wait = round(datos['Wait Time Min'].mean(), 2)
+    avg_score = round(datos['Care Score'].mean(), 2)
 
-    kpi_total = dbc.Card(dbc.CardBody([html.H5("Pacientes"), html.H3(total)]))
-    kpi_wait = dbc.Card(dbc.CardBody([html.H5("Tiempo Promedio"), html.H3(avg_wait)]))
-    kpi_rating = dbc.Card(dbc.CardBody([html.H5("Satisfacción"), html.H3(avg_rating)]))
+    kpi_pacientes = dbc.Card(dbc.CardBody([html.H6("Pacientes"), html.H2(total)]))
+    kpi_espera = dbc.Card(dbc.CardBody([html.H6("Espera"), html.H2(avg_wait)]))
+    kpi_satisfaccion = dbc.Card(dbc.CardBody([html.H6("Satisfacción"), html.H2(avg_score)]))
 
-    return fig_volume, fig_wait, fig_rating, kpi_total, kpi_wait, kpi_rating
+    return fig_volumen, fig_espera, fig_satisfaccion, kpi_pacientes, kpi_espera, kpi_satisfaccion
+
 
 # ================================
 # ▶️ RUN LOCAL
 # ================================
 if __name__ == "__main__":
     app.run()
+```
