@@ -3,5 +3,3 @@ pandas
 plotly
 dash-bootstrap-components
 gunicorn
-openai
-scikit-learn
