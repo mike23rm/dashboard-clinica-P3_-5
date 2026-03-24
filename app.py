@@ -1,82 +1,54 @@
 # ================================
 # 📦 IMPORTACIONES
 # ================================
-# Librería para manejo de datos (DataFrames)
 import pandas as pd
-
-# Librería para gráficos interactivos
 import plotly.express as px
-
-# Componentes principales de Dash (framework web)
 from dash import Dash, html, dcc, Input, Output
-
-# Componentes con estilos Bootstrap
 import dash_bootstrap_components as dbc
-
-# Librería para manejar rutas de archivos
 import os
-
 
 # ================================
 # 🎨 CONFIG GLOBAL
 # ================================
-# Tema global de gráficos (oscuro)
 px.defaults.template = "plotly_dark"
 
-# Diccionario de colores personalizados para todo el dashboard
 COLORS = {
-    "primary": "#4F46E5",    # Azul principal
-    "secondary": "#06B6D4",  # Celeste
-    "success": "#10B981",    # Verde
-    "warning": "#F59E0B",    # Amarillo
-    "danger": "#EF4444",     # Rojo
-    "bg": "#0F172A",         # Fondo general
-    "card": "#1E293B",       # Fondo de tarjetas
-    "text": "#E2E8F0"        # Texto
+    "primary": "#4F46E5",
+    "secondary": "#06B6D4",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+    "danger": "#EF4444",
+    "bg": "#0F172A",
+    "card": "#1E293B",
+    "text": "#E2E8F0"
 }
-
 
 # ================================
 # 📥 CARGA DE DATOS
 # ================================
-# Obtiene la ruta del archivo actual (para evitar errores en Render o servidores)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Construye la ruta completa del CSV
 file_path = os.path.join(BASE_DIR, "clinical_analytics.csv")
 
-# Lee el archivo CSV
 df = pd.read_csv(file_path)
-
-# Limpia espacios en nombres de columnas
 df.columns = df.columns.str.strip()
 
-# Convierte la columna de fecha a formato datetime
 df["Appt Start Time"] = pd.to_datetime(df["Appt Start Time"], errors="coerce")
-
-# Elimina filas con fechas inválidas o vacías
 df = df.dropna(subset=["Appt Start Time"])
-
 
 # ================================
 # 🚀 APP
 # ================================
-# Inicializa la aplicación Dash con tema Bootstrap oscuro
 app = Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
-
-# Necesario para despliegue en Render/Heroku
 server = app.server
 
-
 # ================================
-# 🎨 COMPONENTES REUTILIZABLES
+# 🎨 COMPONENTES
 # ================================
-# Tarjeta KPI reutilizable (métricas principales)
 def kpi_card(title, value, color):
     return dbc.Card(
         dbc.CardBody([
-            html.H6(title, className="text-muted"),  # Título pequeño
-            html.H2(value, style={"color": color, "fontWeight": "bold"})  # Valor principal
+            html.H6(title, className="text-muted"),
+            html.H2(value, style={"color": color, "fontWeight": "bold"})
         ]),
         style={
             "borderRadius": "15px",
@@ -85,7 +57,6 @@ def kpi_card(title, value, color):
         }
     )
 
-# Tarjeta contenedora para gráficos
 def graph_card(graph):
     return dbc.Card(
         dbc.CardBody(graph),
@@ -96,17 +67,16 @@ def graph_card(graph):
         }
     )
 
-
 # ================================
-# 🎨 LAYOUT (DISEÑO)
+# 🎨 LAYOUT
 # ================================
 app.layout = dbc.Container([
 
-    # 🔷 HEADER (barra superior)
+    # HEADER
     dbc.Navbar(
         dbc.Container([
             html.Div([
-                html.H3("🏥 Dashboard Clínico", className="fw-bold mb-0"),
+                html.H3("🏥 Panel de control clínico", className="fw-bold mb-0"),
                 html.Small("Analítica avanzada de pacientes", className="text-muted")
             ])
         ]),
@@ -115,53 +85,67 @@ app.layout = dbc.Container([
         className="mb-4"
     ),
 
-    # 🔎 FILTROS
+    # FILTROS
     dbc.Card([
         dbc.CardBody([
+
             dbc.Row([
 
-                # Filtro por rango de fechas
+                # FECHAS
                 dbc.Col([
                     html.Label("📅 Fechas"),
                     dcc.DatePickerRange(
                         id="filtro_fecha",
                         start_date=df["Appt Start Time"].min(),
                         end_date=df["Appt Start Time"].max(),
+                        display_format="DD/MM/YYYY",
+                        start_date_placeholder_text="Fecha inicio",
+                        end_date_placeholder_text="Fecha fin",
                     ),
                 ], md=4),
 
-                # Filtro por clínica
+                # CLÍNICA
                 dbc.Col([
                     html.Label("🏥 Clínica"),
                     dcc.Dropdown(
                         id="filtro_clinica",
                         options=[{"label": c, "value": c} for c in df["Clinic Name"].dropna().unique()],
                         multi=True,
+                        placeholder="Selecciona una o varias clínicas..."
                     ),
                 ], md=4),
 
-                # Filtro por fuente de ingreso
+                # FUENTE
                 dbc.Col([
                     html.Label("🚑 Fuente"),
                     dcc.Dropdown(
                         id="filtro_fuente",
                         options=[{"label": s, "value": s} for s in df["Admit Source"].dropna().unique()],
                         multi=True,
+                        placeholder="Selecciona fuente de ingreso..."
                     ),
                 ], md=4),
 
-            ])
+            ]),
+
+            # 🔥 RESUMEN DINÁMICO (MEJORA UX)
+            html.Div(
+                id="resumen_filtros",
+                className="mt-3 fw-bold",
+                style={"color": COLORS["secondary"]}
+            )
+
         ])
     ], className="mb-4", style={"background": COLORS["card"], "borderRadius": "15px"}),
 
-    # 📊 KPIs (indicadores)
+    # KPIs
     dbc.Row([
         dbc.Col(html.Div(id="kpi_pacientes"), md=4),
         dbc.Col(html.Div(id="kpi_espera"), md=4),
         dbc.Col(html.Div(id="kpi_satisfaccion"), md=4),
     ], className="mb-4"),
 
-    # 📈 GRÁFICOS PRINCIPALES
+    # GRÁFICOS
     dbc.Row([
         dbc.Col(graph_card(dcc.Graph(id="grafico_volumen")), md=6),
         dbc.Col(graph_card(dcc.Graph(id="grafico_tiempo")), md=6),
@@ -174,9 +158,8 @@ app.layout = dbc.Container([
 
 ], fluid=True)
 
-
 # ================================
-# 🔄 CALLBACK (LÓGICA DINÁMICA)
+# 🔄 CALLBACK
 # ================================
 @app.callback(
     [
@@ -187,6 +170,7 @@ app.layout = dbc.Container([
         Output("kpi_pacientes", "children"),
         Output("kpi_espera", "children"),
         Output("kpi_satisfaccion", "children"),
+        Output("resumen_filtros", "children"),  # 👈 nuevo
     ],
     [
         Input("filtro_fecha", "start_date"),
@@ -197,29 +181,24 @@ app.layout = dbc.Container([
 )
 def actualizar_dashboard(inicio, fin, clinicas, fuentes):
 
-    # Copia del dataset original
     datos = df.copy()
 
-    # Filtrado por fechas
+    # FILTROS
     if inicio and fin:
         datos = datos[
             (datos["Appt Start Time"] >= inicio) &
             (datos["Appt Start Time"] <= fin)
         ]
 
-    # Filtrado por clínica
     if clinicas:
         datos = datos[datos["Clinic Name"].isin(clinicas)]
 
-    # Filtrado por fuente
     if fuentes:
         datos = datos[datos["Admit Source"].isin(fuentes)]
 
     # ================================
-    # 📊 GRÁFICOS
+    # GRÁFICOS
     # ================================
-
-    # Volumen de pacientes por clínica
     volumen = datos.groupby("Clinic Name").size().reset_index(name="Pacientes")
     volumen = volumen.sort_values("Pacientes", ascending=False)
 
@@ -232,7 +211,6 @@ def actualizar_dashboard(inicio, fin, clinicas, fuentes):
         title="Pacientes por Clínica"
     )
 
-    # Tendencia de pacientes en el tiempo
     tendencia = datos.groupby(datos["Appt Start Time"].dt.date).size().reset_index(name="Pacientes")
 
     fig_tiempo = px.line(
@@ -243,7 +221,6 @@ def actualizar_dashboard(inicio, fin, clinicas, fuentes):
         title="Tendencia de Pacientes"
     )
 
-    # Distribución del tiempo de espera
     fig_espera = px.box(
         datos,
         x="Department",
@@ -252,7 +229,6 @@ def actualizar_dashboard(inicio, fin, clinicas, fuentes):
         title="Distribución de Tiempo de Espera"
     )
 
-    # Distribución de satisfacción del paciente
     fig_satisfaccion = px.histogram(
         datos,
         x="Care Score",
@@ -262,13 +238,29 @@ def actualizar_dashboard(inicio, fin, clinicas, fuentes):
     )
 
     # ================================
-    # 📊 KPIs
+    # KPIs
     # ================================
-    total = len(datos)  # Total pacientes
-    avg_wait = round(datos["Wait Time Min"].mean(), 2)  # Promedio espera
-    avg_score = round(datos["Care Score"].mean(), 2)    # Promedio satisfacción
+    total = len(datos)
+    avg_wait = round(datos["Wait Time Min"].mean(), 2)
+    avg_score = round(datos["Care Score"].mean(), 2)
 
-    # Retorna todos los outputs
+    # ================================
+    # 🔥 TEXTO DINÁMICO (UX PRO)
+    # ================================
+    texto_fecha = f"📅 {inicio[:10]} → {fin[:10]}" if inicio and fin else "📅 Todas las fechas"
+
+    texto_clinica = (
+        f"🏥 {', '.join(clinicas[:3])}..." if clinicas and len(clinicas) > 3
+        else f"🏥 {', '.join(clinicas)}" if clinicas
+        else "🏥 Todas las clínicas"
+    )
+
+    texto_fuente = (
+        f"🚑 {', '.join(fuentes)}" if fuentes else "🚑 Todas las fuentes"
+    )
+
+    resumen = f"{texto_fecha} | {texto_clinica} | {texto_fuente}"
+
     return (
         fig_volumen,
         fig_espera,
@@ -277,12 +269,11 @@ def actualizar_dashboard(inicio, fin, clinicas, fuentes):
         kpi_card("Pacientes", total, COLORS["primary"]),
         kpi_card("Espera Promedio", avg_wait, COLORS["warning"]),
         kpi_card("Satisfacción", avg_score, COLORS["success"]),
+        resumen
     )
 
-
 # ================================
-# ▶️ EJECUCIÓN
+# ▶️ RUN
 # ================================
-# Ejecuta la app en modo local
 if __name__ == "__main__":
     app.run()
